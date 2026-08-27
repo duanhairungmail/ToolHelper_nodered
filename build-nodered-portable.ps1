@@ -47,6 +47,7 @@ Copy-Item $nodeRoot $portableNode -Recurse -Force
 $npm = Join-Path $portableNode "npm.cmd"
 $packageConfig = @{ name = "toolhelper-nodered-runtime"; private = $true; allowScripts = @( "@serialport/bindings-cpp@10.8.0", "@serialport/bindings-cpp@12.0.1", "@serialport/bindings-cpp@13.0.0" ) }
 $packageConfig | ConvertTo-Json | Set-Content -Path (Join-Path $stage "package.json") -Encoding UTF8
+Set-Content -Path (Join-Path $stage ".npmrc") -Value "allow-scripts=@serialport/bindings-cpp" -Encoding ASCII
 
 Write-Host "安装 Node-RED 及串口/Modbus 节点 ..."
 Invoke-Native $npm @(
@@ -56,6 +57,9 @@ Invoke-Native $npm @(
     "node-red-contrib-modbus@$ModbusVersion"
 )
 
+Write-Host "构建串口原生绑定 ..."
+Invoke-Native $npm @("rebuild", "@serialport/bindings-cpp", "--foreground-scripts", "--allow-remote", "all")
+if (-not (Get-ChildItem (Join-Path $stage "node_modules\@serialport\bindings-cpp\prebuilds\win32-x64") -Filter "*.node" -ErrorAction SilentlyContinue)) { throw "串口原生绑定构建失败：未找到 win32-x64 .node 文件" }
 New-Item -ItemType Directory -Force -Path (Join-Path $stage "data") | Out-Null
 Set-Content -Path (Join-Path $stage "data\.gitkeep") -Value "" -Encoding ASCII
 Set-Content -Path (Join-Path $stage "version.txt") -Value "v$NodeRedVersion" -Encoding UTF8
@@ -91,6 +95,7 @@ if ($PublishRelease) {
     Invoke-Native "gh" @("release", "create", $tag, $assetPath, $hashPath, "--repo", $Repository, "--title", "Node-RED $NodeRedVersion 便携运行时", "--notes", "Node.js $NodeVersion；Node-RED $NodeRedVersion；node-red-node-serialport $SerialPortVersion；node-red-contrib-modbus $ModbusVersion。")
     if ($LASTEXITCODE -ne 0) { throw "GitHub Release 发布失败" }
 }
+
 
 
 
